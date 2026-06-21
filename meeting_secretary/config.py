@@ -5,10 +5,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 DEFAULT_OPENROUTER_MODELS = (
-    "openrouter/free",
-    "nvidia/nemotron-nano-9b-v2:free",
-    "meta-llama/llama-3.2-3b-instruct:free",
-    "meta-llama/llama-3.3-70b-instruct:free",
+    "qwen/qwen-2.5-72b-instruct",
+    "meta-llama/llama-3.3-70b-instruct",
+    "deepseek/deepseek-chat",
+    "mistralai/mistral-small-3.1-24b-instruct",
 )
 
 
@@ -49,7 +49,7 @@ class Settings:
 
 
 def _parse_openrouter_models() -> tuple[str, ...]:
-    primary = os.getenv("OPENROUTER_MODEL", "openrouter/free").strip()
+    primary = os.getenv("OPENROUTER_MODEL", "qwen/qwen-2.5-72b-instruct").strip()
     extra = os.getenv("OPENROUTER_FALLBACK_MODELS", "").strip()
     models: list[str] = []
     for candidate in (primary, *extra.split(","), *DEFAULT_OPENROUTER_MODELS):

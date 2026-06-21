@@ -3,10 +3,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import tempfile
+import time
 from pathlib import Path
 
 from telegram import Update
 from telegram.constants import ChatAction
+from telegram.error import NetworkError, TimedOut
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -14,6 +16,7 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+from telegram.request import HTTPXRequest
 
 from meeting_secretary.audio import convert_to_wav, merge_wav_files
 from meeting_secretary.config import Settings
@@ -125,16 +128,30 @@ async def _download_audio(
 
     if message.voice:
         file = await context.bot.get_file(message.voice.file_id)
+        kind = "voice"
+        size = message.voice.file_size or 0
     elif message.audio:
         file = await context.bot.get_file(message.audio.file_id)
+        kind = "audio"
+        size = message.audio.file_size or 0
     elif message.document and message.document.mime_type and message.document.mime_type.startswith(
         "audio/"
     ):
         file = await context.bot.get_file(message.document.file_id)
+        kind = "document"
+        size = message.document.file_size or 0
     else:
         raise RuntimeError("Unsupported message type")
 
+    logger.info("Downloading %s (%.1f KB) -> %s", kind, size / 1024, dest.name)
+    started = time.perf_counter()
     await file.download_to_drive(custom_path=str(dest))
+    logger.info(
+        "Download finished in %.1fs: %s (%.1f KB on disk)",
+        time.perf_counter() - started,
+        dest.name,
+        dest.stat().st_size / 1024,
+    )
 
 
 async def _process_meeting(
@@ -143,13 +160,22 @@ async def _process_meeting(
     audio_paths: list[Path],
     title: str | None,
 ) -> None:
-    settings: Settings = context.application.bot_data["settings"]
     transcriber: Transcriber = context.application.bot_data["transcriber"]
     summarizer: Summarizer = context.application.bot_data["summarizer"]
 
     message = update.effective_message
     if message is None:
         return
+
+    user = update.effective_user
+    user_id = user.id if user else "?"
+    pipeline_started = time.perf_counter()
+    logger.info(
+        "[user=%s] Pipeline started: parts=%d title=%r",
+        user_id,
+        len(audio_paths),
+        title,
+    )
 
     await context.bot.send_chat_action(
         chat_id=message.chat_id,
@@ -171,20 +197,51 @@ async def _process_meeting(
         else:
             merge_wav_files(wav_parts, merged)
 
-        await status.edit_text("Распознаю вашу речь (Whisper small, CPU)…")
+        if transcriber.is_loaded:
+            await status.edit_text("Распознаю вашу речь (Whisper small, CPU)…")
+        else:
+            await status.edit_text(
+                "Скачиваю и загружаю модель Whisper (~500 МБ при первом запуске)…",
+            )
+
+        logger.info("[user=%s] Stage: transcription", user_id)
         loop = asyncio.get_running_loop()
-        transcript = await loop.run_in_executor(
-            None,
-            transcriber.transcribe,
-            merged,
-        )
+        try:
+            transcript = await loop.run_in_executor(
+                None,
+                transcriber.transcribe,
+                merged,
+            )
+        except Exception:
+            logger.exception("[user=%s] Transcription stage failed", user_id)
+            await status.edit_text(
+                "Ошибка распознавания речи. Проверьте логи бота и интернет "
+                "(при первом запуске скачивается модель Whisper ~500 МБ).",
+            )
+            raise
 
         if not transcript:
+            logger.warning("[user=%s] Empty transcript", user_id)
             await status.edit_text("В записи не удалось распознать речь.")
             return
 
         await status.edit_text("Формирую постмит (OpenRouter)…")
-        summary = await summarizer.summarize(transcript, meeting_title=title)
+        logger.info("[user=%s] Stage: summarization", user_id)
+        try:
+            summary = await summarizer.summarize(transcript, meeting_title=title)
+        except Exception:
+            logger.exception("[user=%s] Summarization stage failed", user_id)
+            await status.edit_text(
+                "Транскрипт готов, но ошибка при формировании постмита (OpenRouter). "
+                "Проверьте API-ключ и баланс.",
+            )
+            raise
+
+    logger.info(
+        "[user=%s] Pipeline finished in %.1fs",
+        user_id,
+        time.perf_counter() - pipeline_started,
+    )
 
     await status.delete()
 
@@ -290,9 +347,16 @@ async def on_audio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 def build_application(settings: Settings) -> Application:
+    request = HTTPXRequest(
+        connect_timeout=60.0,
+        read_timeout=60.0,
+        write_timeout=60.0,
+        pool_timeout=60.0,
+    )
     app = (
         Application.builder()
         .token(settings.telegram_token)
+        .request(request)
         .build()
     )
     app.bot_data["settings"] = settings
@@ -316,19 +380,57 @@ def build_application(settings: Settings) -> Application:
     return app
 
 
+def setup_logging() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    )
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("telegram").setLevel(logging.WARNING)
+
+
 def main() -> None:
     from dotenv import load_dotenv
 
     load_dotenv()
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    setup_logging()
     settings = Settings.from_env()
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     app = build_application(settings)
-    logger.info("Meeting Secretary bot started")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+
+    transcriber: Transcriber = app.bot_data["transcriber"]
+    logger.info("Meeting Secretary bot starting — pre-loading Whisper model…")
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(
+            loop.run_in_executor(None, transcriber.preload),
+        )
+    except Exception:
+        logger.exception(
+            "Whisper preload failed — bot will still start, "
+            "but first voice message may hang while downloading the model",
+        )
+    finally:
+        loop.close()
+
+    logger.info("Meeting Secretary bot ready, starting polling")
+    for attempt in range(1, 6):
+        try:
+            app.run_polling(allowed_updates=Update.ALL_TYPES)
+            break
+        except (NetworkError, TimedOut) as exc:
+            if attempt >= 5:
+                logger.exception("Telegram connection failed after %d attempts", attempt)
+                raise
+            delay = 10 * attempt
+            logger.warning(
+                "Telegram connection failed (%s), retry %d/5 in %ds…",
+                exc,
+                attempt,
+                delay,
+            )
+            time.sleep(delay)
 
 
 if __name__ == "__main__":

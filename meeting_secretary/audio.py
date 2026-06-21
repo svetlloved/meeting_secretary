@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
 
 import av
@@ -51,6 +52,14 @@ def _decode_to_wav_stream(
 def convert_to_wav(source: Path, destination: Path) -> Path:
     """Convert arbitrary audio to 16 kHz mono WAV for Whisper (PyAV, без ffmpeg)."""
     destination.parent.mkdir(parents=True, exist_ok=True)
+    source_kb = source.stat().st_size / 1024 if source.exists() else 0
+    logger.info(
+        "Audio convert started: %s -> %s (source %.1f KB)",
+        source.name,
+        destination.name,
+        source_kb,
+    )
+    started = time.perf_counter()
 
     try:
         with av.open(str(destination), "w", format="wav") as out_container:
@@ -64,8 +73,16 @@ def convert_to_wav(source: Path, destination: Path) -> Path:
         raise RuntimeError(f"Не удалось конвертировать аудио: {exc}") from exc
 
     if not destination.exists() or destination.stat().st_size == 0:
+        logger.error("Audio conversion produced empty file: %s", destination)
         raise RuntimeError("Конвертация дала пустой файл — проверьте формат записи")
 
+    out_kb = destination.stat().st_size / 1024
+    logger.info(
+        "Audio convert finished in %.1fs: %s (%.1f KB)",
+        time.perf_counter() - started,
+        destination.name,
+        out_kb,
+    )
     return destination
 
 
@@ -76,6 +93,8 @@ def merge_wav_files(sources: list[Path], destination: Path) -> Path:
         return sources[0]
 
     destination.parent.mkdir(parents=True, exist_ok=True)
+    logger.info("Audio merge started: %d parts -> %s", len(sources), destination.name)
+    started = time.perf_counter()
 
     try:
         with av.open(str(destination), "w", format="wav") as out_container:
@@ -91,4 +110,11 @@ def merge_wav_files(sources: list[Path], destination: Path) -> Path:
         logger.exception("Audio merge failed")
         raise RuntimeError(f"Не удалось объединить части записи: {exc}") from exc
 
+    out_kb = destination.stat().st_size / 1024
+    logger.info(
+        "Audio merge finished in %.1fs: %s (%.1f KB)",
+        time.perf_counter() - started,
+        destination.name,
+        out_kb,
+    )
     return destination

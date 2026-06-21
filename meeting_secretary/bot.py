@@ -8,7 +8,6 @@ from pathlib import Path
 
 from telegram import Update
 from telegram.constants import ChatAction
-from telegram.error import NetworkError, TimedOut
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -391,46 +390,20 @@ def setup_logging() -> None:
 
 
 def main() -> None:
-    from dotenv import load_dotenv
+    import asyncio
 
-    load_dotenv()
-    setup_logging()
-    settings = Settings.from_env()
-    settings.data_dir.mkdir(parents=True, exist_ok=True)
-    app = build_application(settings)
+    async def _run() -> None:
+        from meeting_secretary.runtime import create_runtime
 
-    transcriber: Transcriber = app.bot_data["transcriber"]
-    logger.info("Meeting Secretary bot starting — pre-loading Whisper model…")
-    loop = asyncio.new_event_loop()
-    try:
-        loop.run_until_complete(
-            loop.run_in_executor(None, transcriber.preload),
-        )
-    except Exception:
-        logger.exception(
-            "Whisper preload failed — bot will still start, "
-            "but first voice message may hang while downloading the model",
-        )
-    finally:
-        loop.close()
-
-    logger.info("Meeting Secretary bot ready, starting polling")
-    for attempt in range(1, 6):
+        runtime = create_runtime()
+        await runtime.preload_whisper()
+        await runtime.start()
         try:
-            app.run_polling(allowed_updates=Update.ALL_TYPES)
-            break
-        except (NetworkError, TimedOut) as exc:
-            if attempt >= 5:
-                logger.exception("Telegram connection failed after %d attempts", attempt)
-                raise
-            delay = 10 * attempt
-            logger.warning(
-                "Telegram connection failed (%s), retry %d/5 in %ds…",
-                exc,
-                attempt,
-                delay,
-            )
-            time.sleep(delay)
+            await asyncio.Event().wait()
+        finally:
+            await runtime.stop()
+
+    asyncio.run(_run())
 
 
 if __name__ == "__main__":

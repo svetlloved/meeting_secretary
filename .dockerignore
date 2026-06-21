@@ -1,0 +1,14 @@
+.git
+.venv
+__pycache__
+*.pyc
+*.pyo
+.env
+data/
+models/
+*.wav
+*.ogg
+*.md
+!README.md
+.cursor
+terminals

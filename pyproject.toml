@@ -14,10 +14,13 @@ dependencies = [
     "httpx==0.28.1",
     "python-dotenv==1.0.1",
     "requests>=2.31.0",
+    "fastapi==0.115.12",
+    "uvicorn[standard]==0.34.2",
 ]
 
 [project.scripts]
-meeting-secretary = "meeting_secretary.bot:main"
+meeting-secretary = "meeting_secretary.server:main"
+meeting-secretary-bot = "meeting_secretary.bot:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -40,7 +40,7 @@ HELP_TEXT = """Привет! Я личный секретарь для встр�
 
 Можно отправить один аудиофайл без /new — обработаю сразу.
 
-Технологии: Whisper small (CPU) + OpenRouter LLM."""
+Технологии: Whisper (CPU) + OpenRouter LLM."""
 
 
 def _user_dir(settings: Settings, user_id: int, session_id: str) -> Path:
@@ -159,8 +159,10 @@ async def _process_meeting(
     audio_paths: list[Path],
     title: str | None,
 ) -> None:
+    settings: Settings = context.application.bot_data["settings"]
     transcriber: Transcriber = context.application.bot_data["transcriber"]
     summarizer: Summarizer = context.application.bot_data["summarizer"]
+    whisper_label = f"Whisper {settings.whisper_model}, CPU"
 
     message = update.effective_message
     if message is None:
@@ -197,10 +199,10 @@ async def _process_meeting(
             merge_wav_files(wav_parts, merged)
 
         if transcriber.is_loaded:
-            await status.edit_text("Распознаю вашу речь (Whisper small, CPU)…")
+            await status.edit_text(f"Распознаю вашу речь ({whisper_label})…")
         else:
             await status.edit_text(
-                "Скачиваю и загружаю модель Whisper (~500 МБ при первом запуске)…",
+                f"Загружаю модель {whisper_label}…",
             )
 
         logger.info("[user=%s] Stage: transcription", user_id)
@@ -214,8 +216,7 @@ async def _process_meeting(
         except Exception:
             logger.exception("[user=%s] Transcription stage failed", user_id)
             await status.edit_text(
-                "Ошибка распознавания речи. Проверьте логи бота и интернет "
-                "(при первом запуске скачивается модель Whisper ~500 МБ).",
+                "Ошибка распознавания речи. Проверьте логи бота и наличие модели Whisper.",
             )
             raise
 

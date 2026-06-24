@@ -1,6 +1,6 @@
 # Meeting Secretary
 
-Telegram-бот — личный секретарь для встреч: запись голосом → транскрипция (Whisper **small** на CPU) → постмит с договорённостями и action items (LLM через [OpenRouter](https://openrouter.ai)).
+Telegram-бот — личный секретарь для встреч: запись голосом → транскрипция (Whisper **medium** на CPU) → постмит с договорённостями и action items (LLM через [OpenRouter](https://openrouter.ai)).
 
 ## Возможности
 
@@ -26,7 +26,7 @@ cp .env.example .env
 # отредактируйте .env
 ```
 
-При первом запуске Whisper скачает модель `small` (~500 МБ).
+При первом запуске Whisper скачает модель `medium` (~1.5 ГБ).
 
 ## Запуск
 
@@ -55,8 +55,8 @@ python -m meeting_secretary
 - `TELEGRAM_BOT_TOKEN` — токен бота
 - `OPENROUTER_API_KEY` — ключ OpenRouter
 - `OPENROUTER_MODEL` — модель для суммаризации
-- `WHISPER_*` — параметры распознавания (по умолчанию small + CPU + int8)
+- `WHISPER_*` — параметры распознавания (по умолчанию medium + CPU + int8)
 
 ## Производительность
 
-Whisper small на CPU: ориентировочно 0.5–2× длительности аудио в зависимости от машины. Длинные встречи лучше дробить на несколько голосовых и собирать через `/done`.
+Whisper medium на CPU: ориентировочно 1–3× длительности аудио в зависимости от машины. Длинные встречи лучше дробить на несколько голосовых и собирать через `/done`.

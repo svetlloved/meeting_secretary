@@ -3,7 +3,7 @@ FROM python:3.12-slim-bookworm
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    WHISPER_MODEL_DIR=/app/models/whisper-small \
+    WHISPER_MODEL_DIR=/app/models/whisper-medium \
     DATA_DIR=/app/data \
     HOST=0.0.0.0 \
     PORT=8000

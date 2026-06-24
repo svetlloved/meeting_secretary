@@ -33,9 +33,9 @@ class Settings:
             telegram_token=_require("TELEGRAM_BOT_TOKEN"),
             openrouter_api_key=_require("OPENROUTER_API_KEY"),
             openrouter_models=_parse_openrouter_models(),
-            whisper_model=os.getenv("WHISPER_MODEL", "small"),
+            whisper_model=os.getenv("WHISPER_MODEL", "medium"),
             whisper_model_dir=Path(
-                os.getenv("WHISPER_MODEL_DIR", "./models/whisper-small")
+                os.getenv("WHISPER_MODEL_DIR", "./models/whisper-medium")
             ).resolve(),
             whisper_device=os.getenv("WHISPER_DEVICE", "cpu"),
             whisper_compute_type=os.getenv("WHISPER_COMPUTE_TYPE", "int8"),

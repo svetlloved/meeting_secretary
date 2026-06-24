@@ -13,11 +13,27 @@ Telegram-бот — личный секретарь для встреч: зап�
 
 ## Требования
 
-- Python 3.10+
+- Python 3.10+ (локальный запуск) или Docker + Docker Compose
 - Токен Telegram-бота ([@BotFather](https://t.me/BotFather))
 - API-ключ [OpenRouter](https://openrouter.ai/keys)
 
-## Установка
+## Архитектура
+
+Один процесс: **FastAPI** (Uvicorn) + **Telegram-бот** внутри него.
+
+```
+Telegram API  ←── long polling ──  бот (python-telegram-bot)
+                                        │
+                                   Whisper + OpenRouter
+                                        │
+FastAPI :8000  ←── /health, /ready ──  мониторинг (Docker healthcheck)
+```
+
+**Telegram не шлёт запросы в FastAPI.** Бот сам опрашивает `api.telegram.org` (long polling). FastAPI нужен как оболочка процесса и для проверок готовности (`/health`, `/ready`) — в том числе в Docker.
+
+И локальный `python -m meeting_secretary`, и Docker запускают одно и то же: Uvicorn + FastAPI, а при старте приложения поднимается бот.
+
+## Установка (локально)
 
 ```bash
 cd meeting-secretary
@@ -28,15 +44,43 @@ cp .env.example .env
 # отредактируйте .env
 ```
 
-При первом запуске Whisper скачает модель `medium` (~1.5 ГБ).
+При первом запуске Whisper скачает модель `medium` (~1.5 ГБ):
+
+```bash
+python scripts/download_whisper_model.py
+```
 
 ## Запуск
+
+### Docker (рекомендуется для сервера)
+
+```bash
+cp .env.example .env
+# отредактируйте .env
+
+docker compose up -d --build
+```
+
+Проверка:
+
+```bash
+curl http://localhost:8000/ready
+docker compose logs -f
+```
+
+Остановка: `docker compose down`
+
+Модель Whisper вшивается в образ при сборке. Данные сессий хранятся в Docker-volume `meeting-data`.
+
+### Локально (разработка)
 
 ```bash
 source .venv/bin/activate
 export $(grep -v '^#' .env | xargs)
 python -m meeting_secretary
 ```
+
+Команда выше поднимает FastAPI на порту `8000` (по умолчанию) и внутри него — Telegram-бот.
 
 ## Использование
 

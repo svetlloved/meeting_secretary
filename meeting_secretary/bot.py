@@ -6,7 +6,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from telegram import Update
+from telegram import BotCommand, Update
 from telegram.constants import ChatAction
 from telegram.ext import (
     Application,
@@ -28,19 +28,11 @@ logger = logging.getLogger(__name__)
 
 HELP_TEXT = """Привет! Я личный секретарь для встреч.
 
-Как пользоваться:
-1. /new [название] — начать запись встречи
-2. Отправляйте голосовые сообщения или аудиофайлы (можно несколько подряд)
-3. /done — транскрипция + постмит с договорённостями
-4. /cancel — отменить текущую сессию
+Отправьте голосовое или аудиофайл — получите транскрипт и постмит с договорённостями.
 
-Другие команды:
-• /status — сколько частей записано
-• /title Новое название — задать название встречи
+Можно собрать встречу из нескольких записей: начните сессию, пришлите все части и завершите её.
 
-Можно отправить один аудиофайл без /new — обработаю сразу.
-
-Технологии: Whisper (CPU) + OpenRouter LLM."""
+/start — показать эту справку"""
 
 
 def _user_dir(settings: Settings, user_id: int, session_id: str) -> Path:
@@ -378,6 +370,10 @@ def build_application(settings: Settings) -> Application:
         ),
     )
     return app
+
+
+async def setup_bot_commands(application: Application) -> None:
+    await application.bot.set_my_commands([BotCommand("start", "Справка")])
 
 
 def setup_logging() -> None:

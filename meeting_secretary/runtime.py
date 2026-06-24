@@ -9,7 +9,7 @@ from telegram.error import NetworkError, TimedOut
 
 from telegram.ext import Application
 
-from meeting_secretary.bot import build_application, setup_logging
+from meeting_secretary.bot import build_application, setup_logging, setup_bot_commands
 from meeting_secretary.config import Settings
 from meeting_secretary.transcription import Transcriber
 
@@ -45,6 +45,7 @@ class BotRuntime:
             try:
                 await application.initialize()
                 await application.start()
+                await setup_bot_commands(application)
                 await application.updater.start_polling(
                     allowed_updates=Update.ALL_TYPES,
                 )

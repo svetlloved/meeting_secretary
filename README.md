@@ -2,6 +2,8 @@
 
 Telegram-бот — личный секретарь для встреч: запись голосом → транскрипция (Whisper **medium** на CPU) → постмит с договорённостями и action items (LLM через [OpenRouter](https://openrouter.ai)).
 
+**Бот:** [@my_meeting_secretary_bot](https://t.me/my_meeting_secretary_bot)
+
 ## Возможности
 
 - Несколько голосовых сообщений в одной встрече (`/new` → аудио → `/done`)
